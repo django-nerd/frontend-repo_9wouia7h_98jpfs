@@ -3,22 +3,44 @@ import { useEffect, useState } from 'react'
 export default function GlobalStats({ baseUrl }) {
   const [stats, setStats] = useState(null)
   const [error, setError] = useState(null)
+  const [usingCache, setUsingCache] = useState(false)
+
+  const cacheKey = 'cache:globalStats:USD'
 
   useEffect(() => {
     const fetchStats = async () => {
+      setUsingCache(false)
       try {
         const res = await fetch(`${baseUrl}/api/cmc/global?convert=USD`)
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
         setStats(json.data)
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: json.data }))
+        } catch {}
       } catch (e) {
         setError(e.message)
+        // Fallback to cache
+        try {
+          const cached = localStorage.getItem(cacheKey)
+          if (cached) {
+            const parsed = JSON.parse(cached)
+            setStats(parsed.data)
+            setUsingCache(true)
+          }
+        } catch {}
       }
     }
     fetchStats()
   }, [baseUrl])
 
-  if (error) {
+  const Notice = () => (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 p-3 text-sm mb-3">
+      Live data unavailable or limited. Showing last cached snapshot.
+    </div>
+  )
+
+  if (error && !stats) {
     return (
       <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-200">
         Failed to load global stats: {error}
@@ -58,6 +80,7 @@ export default function GlobalStats({ baseUrl }) {
   return (
     <section className="relative -mt-16 z-10">
       <div className="mx-auto max-w-6xl px-6">
+        {usingCache && <Notice />}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {items.map((it) => (
             <div key={it.label} className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-5 text-white">

@@ -5,16 +5,31 @@ export default function TopMovers({ baseUrl }) {
   const [coins, setCoins] = useState([])
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [usingCache, setUsingCache] = useState(false)
+
+  const cacheKey = 'cache:listings:USD:200'
 
   useEffect(() => {
     const load = async () => {
+      setUsingCache(false)
       try {
         const res = await fetch(`${baseUrl}/api/cmc/listings?limit=200&convert=USD`)
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
         setCoins(json.data || [])
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: json.data }))
+        } catch {}
       } catch (e) {
         setError(e.message)
+        try {
+          const cached = localStorage.getItem(cacheKey)
+          if (cached) {
+            const parsed = JSON.parse(cached)
+            setCoins(parsed.data || [])
+            setUsingCache(true)
+          }
+        } catch {}
       } finally {
         setLoading(false)
       }
@@ -39,6 +54,12 @@ export default function TopMovers({ baseUrl }) {
     return n.toFixed(4)
   }
 
+  const Notice = () => (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 p-3 text-sm mb-3">
+      Live data unavailable or limited. Showing last cached snapshot.
+    </div>
+  )
+
   return (
     <section id="top" className="mx-auto max-w-6xl px-6 mt-12">
       <div className="flex items-end justify-between mb-4">
@@ -46,11 +67,13 @@ export default function TopMovers({ baseUrl }) {
         {loading && <span className="text-slate-300/70 text-sm animate-pulse">Refreshing...</span>}
       </div>
 
-      {error && (
+      {error && !coins.length && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-200 mb-4">
           Failed to load coins: {error}
         </div>
       )}
+
+      {usingCache && <Notice />}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {movers.map((c) => {

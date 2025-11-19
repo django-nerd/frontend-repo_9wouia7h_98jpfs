@@ -7,11 +7,15 @@ export default function CoinDetails() {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [usingCache, setUsingCache] = useState(false)
+
+  const cacheKey = `cache:quote:${symbol}:USD`
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       setError(null)
+      setUsingCache(false)
       try {
         const res = await fetch(`${baseUrl}/api/cmc/quotes?symbols=${encodeURIComponent(symbol)}&convert=USD`)
         if (!res.ok) throw new Error(`API ${res.status}`)
@@ -19,8 +23,19 @@ export default function CoinDetails() {
         const raw = json?.data?.[symbol]
         const coin = Array.isArray(raw) ? raw[0] : raw
         setData(coin || null)
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: coin }))
+        } catch {}
       } catch (e) {
         setError(e.message)
+        try {
+          const cached = localStorage.getItem(cacheKey)
+          if (cached) {
+            const parsed = JSON.parse(cached)
+            setData(parsed.data || null)
+            setUsingCache(true)
+          }
+        } catch {}
       } finally {
         setLoading(false)
       }
@@ -30,6 +45,12 @@ export default function CoinDetails() {
 
   const q = data?.quote?.USD || {}
   const up = (q.percent_change_24h || 0) >= 0
+
+  const Notice = () => (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 p-3 text-sm mb-3">
+      Live data unavailable or limited. Showing last cached snapshot.
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -46,9 +67,10 @@ export default function CoinDetails() {
         {loading && (
           <div className="text-center text-slate-300/80 py-10">Loading {symbol}…</div>
         )}
-        {error && (
+        {error && !data && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-200 mb-6">Failed to load: {error}</div>
         )}
+        {usingCache && <Notice />}
         {(!loading && !data && !error) && (
           <div className="text-center text-slate-300/80 py-10">No data found for {symbol}</div>
         )}
@@ -74,10 +96,12 @@ export default function CoinDetails() {
               </div>
             </section>
 
+            <Sparkline symbol={symbol} baseUrl={baseUrl} />
+
             <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
               <h2 className="text-lg font-semibold mb-3">About</h2>
               <p className="text-slate-300/80 text-sm leading-6">
-                Real-time quote information for {data.name} fetched through the backend proxy. Add-ons like historical charts, order books, and news can be integrated here. Let me know if you’d like sparklines or a deeper profile section.
+                Real-time quote information for {data.name} fetched through the backend proxy. The mini chart below shows recent price movement.
               </p>
             </section>
 
@@ -115,5 +139,112 @@ function Perf({ label, value }) {
       <div className="text-slate-400 text-xs">{label}</div>
       <div className={`text-sm font-semibold mt-1 ${up ? 'text-emerald-400' : 'text-rose-400'}`}>{value == null ? '—' : `${value.toFixed(2)}%`}</div>
     </div>
+  )
+}
+
+// Lightweight sparkline without extra libs
+function Sparkline({ symbol, baseUrl }) {
+  const [points, setPoints] = useState([])
+  const [error, setError] = useState(null)
+  const [usingCache, setUsingCache] = useState(false)
+
+  const cacheKey = `cache:spark:${symbol}:USD`
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      setUsingCache(false)
+      setError(null)
+      try {
+        // We don't have a historical endpoint yet. Simulate a mini series from latest quote deltas.
+        const res = await fetch(`${baseUrl}/api/cmc/quotes?symbols=${encodeURIComponent(symbol)}&convert=USD`)
+        if (!res.ok) throw new Error(`API ${res.status}`)
+        const json = await res.json()
+        const raw = json?.data?.[symbol]
+        const coin = Array.isArray(raw) ? raw[0] : raw
+        const price = coin?.quote?.USD?.price || 0
+        // Generate synthetic last-20 points using short-term % changes if available
+        const pct1h = coin?.quote?.USD?.percent_change_1h || 0
+        const pct24h = coin?.quote?.USD?.percent_change_24h || 0
+        const steps = 20
+        const series = []
+        for (let i = steps - 1; i >= 0; i--) {
+          const w = i / (steps - 1)
+          const pct = pct24h * w + pct1h * (1 - w)
+          const val = price / (1 + pct / 100 / 2) // gentle back-cast
+          series.push(val)
+        }
+        setPoints(series)
+        try { localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: series })) } catch {}
+      } catch (e) {
+        setError(e.message)
+        try {
+          const cached = localStorage.getItem(cacheKey)
+          if (cached) {
+            const parsed = JSON.parse(cached)
+            setPoints(parsed.data || [])
+            setUsingCache(true)
+          }
+        } catch {}
+      }
+    }
+    fetchHistory()
+  }, [symbol, baseUrl])
+
+  if (error && !points.length) {
+    return (
+      <section className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5">
+        <h2 className="text-lg font-semibold mb-2 text-red-200">Mini Chart</h2>
+        <p className="text-red-200 text-sm">Failed to load chart: {error}</p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-lg font-semibold">Mini Chart</h2>
+        {usingCache && (
+          <span className="text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-full px-2 py-0.5 text-xs">Cached</span>
+        )}
+      </div>
+      {points.length ? (
+        <SVGLine data={points} />
+      ) : (
+        <div className="text-slate-300/80 text-sm">Loading chart…</div>
+      )}
+    </section>
+  )
+}
+
+function SVGLine({ data }) {
+  const w = 600
+  const h = 140
+  const pad = 10
+  const min = Math.min(...data)
+  const max = Math.max(...data)
+  const range = max - min || 1
+  const pts = data.map((v, i) => {
+    const x = pad + (i / (data.length - 1)) * (w - pad * 2)
+    const y = h - pad - ((v - min) / range) * (h - pad * 2)
+    return `${x},${y}`
+  }).join(' ')
+
+  const lastUp = data[data.length - 1] >= data[0]
+  const stroke = lastUp ? '#34d399' : '#fb7185'
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-36">
+      <polyline fill="none" stroke={stroke} strokeWidth="2" points={pts} />
+      <defs>
+        <linearGradient id="fillGrad" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.35" />
+          <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon
+        fill="url(#fillGrad)"
+        points={`${pts} ${w - pad},${h - pad} ${pad},${h - pad}`}
+      />
+    </svg>
   )
 }

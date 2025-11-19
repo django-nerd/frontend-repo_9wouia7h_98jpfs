@@ -8,16 +8,31 @@ export default function MarketTable({ baseUrl }) {
   const [dir, setDir] = useState('desc')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [usingCache, setUsingCache] = useState(false)
+
+  const cacheKey = 'cache:listings:USD:200'
 
   useEffect(() => {
     const load = async () => {
+      setUsingCache(false)
       try {
         const res = await fetch(`${baseUrl}/api/cmc/listings?limit=200&convert=USD`)
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
         setCoins(json.data || [])
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: json.data }))
+        } catch {}
       } catch (e) {
         setError(e.message)
+        try {
+          const cached = localStorage.getItem(cacheKey)
+          if (cached) {
+            const parsed = JSON.parse(cached)
+            setCoins(parsed.data || [])
+            setUsingCache(true)
+          }
+        } catch {}
       } finally {
         setLoading(false)
       }
@@ -53,6 +68,12 @@ export default function MarketTable({ baseUrl }) {
     </th>
   )
 
+  const Notice = () => (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 p-3 text-sm mb-3">
+      Live data unavailable or limited. Showing last cached snapshot.
+    </div>
+  )
+
   return (
     <section id="dashboard" className="mx-auto max-w-6xl px-6 mt-12 mb-24">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
@@ -65,11 +86,13 @@ export default function MarketTable({ baseUrl }) {
         />
       </div>
 
-      {error && (
+      {error && !coins.length && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-200 mb-4">
           Failed to load market: {error}
         </div>
       )}
+
+      {usingCache && <Notice />}
 
       <div className="overflow-x-auto rounded-2xl border border-white/10 bg-white/5">
         <table className="min-w-full text-sm">
