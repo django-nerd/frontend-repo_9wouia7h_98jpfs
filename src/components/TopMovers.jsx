@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 export default function TopMovers({ baseUrl }) {
   const [coins, setCoins] = useState([])
@@ -55,7 +56,7 @@ export default function TopMovers({ baseUrl }) {
         {movers.map((c) => {
           const up = (c.change || 0) >= 0
           return (
-            <div key={c.id} className="group relative rounded-2xl bg-white/5 hover:bg-white/10 transition border border-white/10 overflow-hidden">
+            <Link to={`/coin/${c.symbol}`} key={c.id} className="group relative rounded-2xl bg-white/5 hover:bg-white/10 transition border border-white/10 overflow-hidden">
               <div className="p-5">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-400/40 to-fuchsia-500/40 border border-white/20" />
@@ -70,7 +71,7 @@ export default function TopMovers({ baseUrl }) {
                 </div>
               </div>
               <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition pointer-events-none bg-[radial-gradient(600px_200px_at_var(--x,50%)_0%,rgba(168,85,247,0.15),transparent)]" />
-            </div>
+            </Link>
           )
         })}
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 export default function MarketTable({ baseUrl }) {
   const [coins, setCoins] = useState([])
@@ -96,11 +97,13 @@ export default function MarketTable({ baseUrl }) {
                     <td className="px-3 py-2 text-slate-300/80">{i + 1}</td>
                     <td className="px-3 py-2 text-white font-medium flex items-center gap-2">
                       <span className="inline-block w-2.5 h-2.5 rounded-full bg-gradient-to-br from-cyan-400 to-fuchsia-500" />
-                      {c.name}
+                      <Link to={`/coin/${c.symbol}`} className="hover:underline">
+                        {c.name}
+                      </Link>
                       <span className="text-slate-300/70 text-xs">{c.symbol}</span>
                     </td>
                     <td className="px-3 py-2 text-slate-100">${q.price?.toLocaleString(undefined, { maximumFractionDigits: 8 })}</td>
-                    <td className={`px-3 py-2 ${up ? 'text-emerald-400' : 'text-rose-400'}`}>{up ? '▲' : '▼'} {(q.percent_change_24h || 0).toFixed(2)}%</td>
+                    <td className={`${up ? 'text-emerald-400' : 'text-rose-400'} px-3 py-2`}>{up ? '▲' : '▼'} {(q.percent_change_24h || 0).toFixed(2)}%</td>
                     <td className="px-3 py-2 text-slate-100">${(q.market_cap || 0).toLocaleString()}</td>
                     <td className="px-3 py-2 text-slate-100">${(q.volume_24h || 0).toLocaleString()}</td>
                   </tr>
