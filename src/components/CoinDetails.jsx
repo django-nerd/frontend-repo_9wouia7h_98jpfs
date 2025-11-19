@@ -142,7 +142,7 @@ function Perf({ label, value }) {
   )
 }
 
-// Lightweight sparkline without extra libs
+// Sparkline now uses real historical data from the backend history endpoint
 function Sparkline({ symbol, baseUrl }) {
   const [points, setPoints] = useState([])
   const [error, setError] = useState(null)
@@ -155,34 +155,23 @@ function Sparkline({ symbol, baseUrl }) {
       setUsingCache(false)
       setError(null)
       try {
-        // We don't have a historical endpoint yet. Simulate a mini series from latest quote deltas.
-        const res = await fetch(`${baseUrl}/api/cmc/quotes?symbols=${encodeURIComponent(symbol)}&convert=USD`)
+        const res = await fetch(`${baseUrl}/api/history?symbol=${encodeURIComponent(symbol)}&convert=USD&days=7`)
         if (!res.ok) throw new Error(`API ${res.status}`)
         const json = await res.json()
-        const raw = json?.data?.[symbol]
-        const coin = Array.isArray(raw) ? raw[0] : raw
-        const price = coin?.quote?.USD?.price || 0
-        // Generate synthetic last-20 points using short-term % changes if available
-        const pct1h = coin?.quote?.USD?.percent_change_1h || 0
-        const pct24h = coin?.quote?.USD?.percent_change_24h || 0
-        const steps = 20
-        const series = []
-        for (let i = steps - 1; i >= 0; i--) {
-          const w = i / (steps - 1)
-          const pct = pct24h * w + pct1h * (1 - w)
-          const val = price / (1 + pct / 100 / 2) // gentle back-cast
-          series.push(val)
-        }
-        setPoints(series)
-        try { localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: series })) } catch {}
+        const prices = Array.isArray(json?.points) ? json.points.map(p => p[1]) : []
+        if (!prices.length) throw new Error('No history')
+        setPoints(prices)
+        try { localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: prices })) } catch {}
       } catch (e) {
         setError(e.message)
         try {
           const cached = localStorage.getItem(cacheKey)
           if (cached) {
             const parsed = JSON.parse(cached)
-            setPoints(parsed.data || [])
-            setUsingCache(true)
+            if (Array.isArray(parsed.data) && parsed.data.length) {
+              setPoints(parsed.data)
+              setUsingCache(true)
+            }
           }
         } catch {}
       }
